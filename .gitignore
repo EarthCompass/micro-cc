@@ -3,3 +3,4 @@ clang+llvm-11.0.0-x86_64-apple-darwin
 cmake-build-debug
 */.DS_Store
 .DS_Store
+.vscode
