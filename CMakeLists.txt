@@ -1,12 +1,28 @@
 cmake_minimum_required(VERSION 3.17)
-project(micro-clang)
+project(micro-cc)
 
 set(CMAKE_CXX_STANDARD 14)
+
+# disable warning
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-deprecated-register")
+
+set(LLVM_DIR clang+llvm-11.0.0-x86_64-apple-darwin/lib/cmake/llvm)
+# file(COPY Nodes.hpp DESTINATION "${CMAKE_CURRENT_BINARY_DIR}")
+
+
+find_package(LLVM)
+
+message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
+message(STATUS "Found LLVM includes in: ${LLVM_INCLUDE_DIRS}")
+message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
+include_directories(${LLVM_INCLUDE_DIRS})
+add_definitions(${LLVM_DEFINITIONS})
 
 find_package(BISON)
 find_package(FLEX)
 FLEX_TARGET(scanner scanner.l ${PROJECT_BINARY_DIR}/scanner.cpp)
-BISON_TARGET(parser parser.y ${PROJECT_BINARY_DIR}/parser.cpp DEFINES_FILE ${CMAKE_CURRENT_BINARY_DIR}/parser.h
+BISON_TARGET(parser parser.y ${PROJECT_BINARY_DIR}/parser.cpp 
+            DEFINES_FILE ${CMAKE_CURRENT_BINARY_DIR}/parser.h
             )
 
 ADD_FLEX_BISON_DEPENDENCY(scanner parser)
@@ -15,7 +31,9 @@ add_library(micro_c_parser ${BISON_parser_OUTPUTS}
               ${FLEX_scanner_OUTPUTS}
               )
               
-add_executable(micro-clang main.cpp)
-target_link_libraries(micro-clang micro_c_parser)
+add_executable(micro-cc main.cpp)
+target_link_libraries(micro-cc micro_c_parser)
 find_library(LEX_LIB l)
-target_link_libraries(micro-clang ${LEX_LIB})
+
+llvm_map_components_to_libnames(llvm_libs support core irreader)
+target_link_libraries(micro-cc ${LEX_LIB} ${llvm_libs})

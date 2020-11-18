@@ -8,16 +8,14 @@ extern FILE *yyin;
 extern int yyparse();
 extern int yylex();
 
-int main(int argc, const char *args[])
-{
-	if(argc > 1 && (yyin = fopen(args[1], "r")) == NULL) {
-		fprintf(stderr, "can not open %s\n", args[1]);
-		exit(1);
-	}
-	while(yylex()) {
-		
-	}
-    return 0;
+int main(int argc, const char *args[]) {
+  if (argc > 1 && (yyin = fopen(args[1], "r")) == NULL) {
+    fprintf(stderr, "can not open %s\n", args[1]);
+    exit(1);
+  }
+  while (yylex()) {
+  }
+  return 0;
 }
 
 void yyerror(const char *s) {
