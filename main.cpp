@@ -3,18 +3,23 @@
 //
 #include "stdio.h"
 #include "stdlib.h"
+#include "Nodes.hpp"
 #include <iostream>
 extern FILE *yyin;
 extern int yyparse();
 extern int yylex();
+extern microcc::Stmts * Mprogram;
 
+void yyerror(const char *s);
 int main(int argc, const char *args[]) {
   if (argc > 1 && (yyin = fopen(args[1], "r")) == NULL) {
     fprintf(stderr, "can not open %s\n", args[1]);
     exit(1);
   }
-  while (yylex()) {
-  }
+  auto p = yyparse();
+  Mprogram->PrintAST(0);
+  // while (yylex()) {
+  // }
   return 0;
 }
 
