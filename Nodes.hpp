@@ -1,3 +1,4 @@
+#pragma once
 #include <iostream>
 #include <llvm/IR/Value.h>
 #include <vector>
@@ -11,27 +12,23 @@ namespace microcc {
 class CodeGenContext;
 class Node {
 public:
-  ~Node() {}
   virtual llvm::Value *codeGen(CodeGenContext &context) {
     return (llvm::Value *)0;
   }
   virtual void PrintAST(int level) {}
 };
-class Stmt {
+class Stmt :public Node{
 public:
-  virtual void PrintAST(int level) {}
+  // virtual void PrintAST(int level) {}
 };
-class Decl {};
-class Expr {
+class Expr : public Node {
 public:
-  //   virtual ~Expr();
-  virtual void PrintAST(int level) {}
+  // virtual void PrintAST(int level) {}
 };
 class IndentifierExpr : public Expr {
 public:
   std::string name;
   bool isType;
-  std::unique_ptr<Expr> expr=nullptr;
   IndentifierExpr(std::string *name, bool isType)
       : name(*name), isType(isType) {}
   virtual void PrintAST(int level) {
@@ -40,8 +37,6 @@ public:
     if (isType)
       std::cout << "Type";
     std::cout << ": " << name << "\n";
-    if(expr)
-      expr->PrintAST(level+1);
   }
 };
 class IntegerLiteralExpr : public Expr {
@@ -58,6 +53,11 @@ class DoubleLiteralExpr : public Expr {
 public:
   double value;
   DoubleLiteralExpr(double value) : value(value) {}
+  virtual void PrintAST(int level) {
+    // std::cout<<level<<"\n";
+    PRINTTAB
+    std::cout << "DoubleLiteralExpr :" << value << "\n";
+  }
 };
 class BinaryOperatorExpr : public Expr {
 public:
@@ -75,28 +75,25 @@ public:
     rhs.get()->PrintAST(level + 1);
   }
 };
-class CallExpr : public Expr {
-public:
-  std::unique_ptr<IndentifierExpr> callee;
-  std::vector<std::unique_ptr<Expr>> args;
-  CallExpr(std::unique_ptr<IndentifierExpr> &callee,
-           std::vector<std::unique_ptr<Expr>> args)
-      : callee(std::move(callee)), args(std::move(args)) {}
-};
+
 
 class VarDeclStmt : public Stmt {
 public:
   std::unique_ptr<IndentifierExpr> type;
   std::unique_ptr<IndentifierExpr> id;
+  std::unique_ptr<Expr> expr;
   VarDeclStmt(std::unique_ptr<IndentifierExpr> type,
-              std::unique_ptr<IndentifierExpr> id)
-      : type(std::move(type)), id(std::move(id)) {}
+              std::unique_ptr<IndentifierExpr> id,
+              std::unique_ptr<Expr> expr)
+      : type(std::move(type)), id(std::move(id)),expr(std::move(expr)) {}
   virtual void PrintAST(int level) {
     PRINTTAB
     std::cout << "VarDeclStmt"
               << "\n";
     type->PrintAST(level + 1);
     id->PrintAST(level + 1);
+    if(expr)
+      expr->PrintAST(level+1);
   }
 };
 class Stmts : public Stmt {
@@ -143,24 +140,60 @@ class ReturnStmt : public Stmt{
     expr->PrintAST(level+1);
   }
 };
+
+class VarDeclExpr {
+  public:
+  std::unique_ptr<IndentifierExpr> type;
+  std::unique_ptr<IndentifierExpr> id;
+  VarDeclExpr(std::unique_ptr<IndentifierExpr>type,std::unique_ptr<IndentifierExpr>id):
+  type(std::move(type)),id(std::move(id)){};
+};
+
+typedef std::vector<std::unique_ptr<VarDeclExpr>> FuncDecArgsList;
+
 class FuncDeclStmt : public Stmt {
 public:
   std::unique_ptr<IndentifierExpr> type;
   std::unique_ptr<IndentifierExpr> id;
-  std::vector<std::unique_ptr<Expr>> args;
+  std::unique_ptr<FuncDecArgsList> args;
   std::unique_ptr<CompoundStmt> funcBody;
   FuncDeclStmt(std::unique_ptr<IndentifierExpr> type,
         std::unique_ptr<IndentifierExpr> id,
+        std::unique_ptr<FuncDecArgsList> args,
         std::unique_ptr<CompoundStmt> funcBody):
-        type(std::move(type)),id(std::move(id)),funcBody(std::move(funcBody)){};
+        type(std::move(type)),id(std::move(id)),args(std::move(args)),funcBody(std::move(funcBody)){};
 
   virtual void PrintAST(int level){
       PRINTTAB
       std::cout<<"FuncDeclStmt "<<"\n";
-      PRINTTAB std::cout<<"return type: ";type->PrintAST(level+1);
-      PRINTTAB std::cout<<"function name: ";id->PrintAST(level+1);
-      PRINTTAB std::cout<<"function body: ";funcBody->PrintAST(level+1);
+      for(auto arg = args->begin();arg!=args->end();arg++){
+          PRINTTAB std::cout<<"arg type: ";std::cout<<arg->get()->type->name<<" ";
+          PRINTTAB std::cout<<"arg name: ";std::cout<<arg->get()->id->name<<std::endl;
+      }
+      PRINTTAB std::cout<<"return type: ";std::cout<<type->name<<std::endl;
+      PRINTTAB std::cout<<"function name: ";std::cout<<id->name<<std::endl;
+      PRINTTAB std::cout<<"function body: \n";funcBody->PrintAST(level+1);
   }
 };
+
+typedef std::vector<std::unique_ptr<Expr>> CallArgs;
+
+class CallExpr : public Expr {
+public:
+  std::unique_ptr<IndentifierExpr> callee;
+  std::unique_ptr<CallArgs> args;
+  CallExpr(std::unique_ptr<IndentifierExpr> callee,
+           std::unique_ptr<CallArgs> args)
+      : callee(std::move(callee)), args(std::move(args)) {};
+    virtual void PrintAST(int level){
+      PRINTTAB
+      std::cout<<"CallExpr :"<<"\n";
+      callee->PrintAST(level+1);
+      for(auto arg = args->begin();arg!=args->end();arg++){
+        arg->get()->PrintAST(level+1);
+      }
+  }
+};
+
 class IfStmt : public Stmt {};
 } // namespace microcc

@@ -4,6 +4,7 @@
 #include "stdio.h"
 #include "stdlib.h"
 #include "Nodes.hpp"
+#include "codegen.h"
 #include <iostream>
 extern FILE *yyin;
 extern int yyparse();
@@ -24,7 +25,7 @@ int main(int argc, const char *args[]) {
 }
 
 void yyerror(const char *s) {
-  std::cout << "EEK, parse error!  Message: " << s << std::endl;
+  std::cout << "0ops, parse error!  Message: " << s << std::endl;
   // might as well halt now:
   exit(-1);
 }

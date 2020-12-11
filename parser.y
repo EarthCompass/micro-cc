@@ -1,5 +1,6 @@
 %code requires { 
       #include <stdio.h>  
+      #include <stdlib.h>  
       #include "Nodes.hpp" 
       using namespace microcc;
       using namespace std;
@@ -18,13 +19,15 @@
       Expr * expr;
       IndentifierExpr * ident;
       std::string* string;
+      FuncDecArgsList* funcargs;
+      CallArgs * callargs;
       int token;
 }
 /* %token NUM VAR  */
 %token <string> T_INTEGER T_DOUBLE T_IDENTIFIER T_TYPE_INT T_TYPE_DOUBLE
 %token <token> T_ADD T_MINUS T_DIV T_MUL T_MOD T_ASSIGN T_GT T_GE T_LT T_LE T_EQUAL
 %token T_LPAREN  T_RPAREN T_LSQUBRACK T_RSQUBRACK T_LBRACE T_RBRACE
-%token T_SEMICOLON 
+%token T_SEMICOLON T_COMMA
 %token T_RETURN
 
 %left T_ADD T_MINUS
@@ -33,15 +36,18 @@
 %type <stmts> stmts
 %type <stmt> stmt singleexprstmt val_dec_stmt func_dec_stmt compound_stmt return_stmt
 %type <ident> val_type
-%type <expr> expr 
+%type <expr> expr call_expr
 %type <token> cmp_operator 
+%type <funcargs> func_args
+%type <callargs>call_args 
 %start program
 %%
 program : stmts {Mprogram = $1;};
 
-stmts : stmt {$$ = new Stmts(); $$->stmts.push_back(unique_ptr<Stmt>($1));}| stmts stmt {$1->stmts.push_back(unique_ptr<Stmt>($2));}
+stmts : stmt {$$ = new Stmts(); $$->stmts.push_back(unique_ptr<Stmt>($1));}| 
+            stmts stmt {$1->stmts.push_back(unique_ptr<Stmt>($2));}
 
-stmt : singleexprstmt {$$ = $1;} | val_dec_stmt | compound_stmt | func_dec_stmt | return_stmt
+stmt : singleexprstmt {$$ = $1;} | val_dec_stmt | compound_stmt | func_dec_stmt | return_stmt 
 
 singleexprstmt : expr T_SEMICOLON {$$ = new SingleExprStmt(unique_ptr<Expr>($1));}
 
@@ -53,6 +59,7 @@ return_stmt : T_RETURN expr T_SEMICOLON {$$ = new ReturnStmt(unique_ptr<Expr>($2
 cmp_operator : T_GT | T_GE | T_LT | T_LE | T_EQUAL 
 
 expr : T_INTEGER {$$ = new IntegerLiteralExpr(atol($1->c_str()));} |
+      T_DOUBLE {$$ = new DoubleLiteralExpr(strtod($1->c_str(),nullptr));} |
       expr T_ADD expr { $$ = new BinaryOperatorExpr($2,unique_ptr<Expr>($1),unique_ptr<Expr>($3)); }|
       expr T_MOD expr { $$ = new BinaryOperatorExpr($2,unique_ptr<Expr>($1),unique_ptr<Expr>($3)); }|
       expr T_MINUS expr { $$ = new BinaryOperatorExpr($2,unique_ptr<Expr>($1),unique_ptr<Expr>($3)); } |
@@ -60,15 +67,34 @@ expr : T_INTEGER {$$ = new IntegerLiteralExpr(atol($1->c_str()));} |
       expr T_DIV expr { $$ = new BinaryOperatorExpr($2,unique_ptr<Expr>($1),unique_ptr<Expr>($3)); } |
       expr cmp_operator expr { $$ = new BinaryOperatorExpr($2,unique_ptr<Expr>($1),unique_ptr<Expr>($3)); } |
       T_LPAREN expr T_RPAREN { $$ = $2; }|
-      T_IDENTIFIER {$$ = new IndentifierExpr($1,false);}
+      expr T_ASSIGN expr{ $$ = new BinaryOperatorExpr($2,unique_ptr<Expr>($1),unique_ptr<Expr>($3)); } |
+      T_IDENTIFIER {$$ = new IndentifierExpr($1,false);}|
+      call_expr
 
 val_type : T_TYPE_INT {$$ = new IndentifierExpr($1,true);} | 
             T_TYPE_DOUBLE {$$ = new IndentifierExpr($1,true);}
-val_dec_stmt : val_type T_IDENTIFIER T_SEMICOLON{ auto id = new IndentifierExpr($2,false); $$ = new VarDeclStmt(unique_ptr<IndentifierExpr>($1),unique_ptr<IndentifierExpr>(id));} |
-            val_type T_IDENTIFIER T_ASSIGN expr T_SEMICOLON{ auto id = new IndentifierExpr($2,false);id->expr = std::move(unique_ptr<Expr>($4)); $$ = new VarDeclStmt(unique_ptr<IndentifierExpr>($1),unique_ptr<IndentifierExpr>(id));}
-
-func_dec_stmt: val_type T_IDENTIFIER T_LPAREN T_RPAREN compound_stmt 
-            { auto id = new IndentifierExpr($2,false); $$ = new FuncDeclStmt(unique_ptr<IndentifierExpr>($1),unique_ptr<IndentifierExpr>(id),unique_ptr<CompoundStmt>((microcc::CompoundStmt *)$5)); }
+val_dec_stmt : val_type T_IDENTIFIER T_SEMICOLON{ auto id = new IndentifierExpr($2,false); $$ = new VarDeclStmt(unique_ptr<IndentifierExpr>($1),unique_ptr<IndentifierExpr>(id),nullptr);} |
+            val_type T_IDENTIFIER T_ASSIGN expr T_SEMICOLON{ auto id = new IndentifierExpr($2,false);$$ = new VarDeclStmt(unique_ptr<IndentifierExpr>($1),unique_ptr<IndentifierExpr>(id),unique_ptr<Expr>($4));}
 
 
+func_dec_stmt: val_type T_IDENTIFIER T_LPAREN func_args T_RPAREN compound_stmt 
+            { auto id = new IndentifierExpr($2,false); 
+            $$ = new FuncDeclStmt(unique_ptr<IndentifierExpr>($1),unique_ptr<IndentifierExpr>(id),unique_ptr<FuncDecArgsList>($4),unique_ptr<CompoundStmt>((microcc::CompoundStmt *)$6)); }
+
+func_args : /*blank*/ {$$ = new FuncDecArgsList();} |
+      val_type T_IDENTIFIER {$$ = new FuncDecArgsList();
+            auto id = new IndentifierExpr($2,false);
+            auto arg = new VarDeclExpr(unique_ptr<IndentifierExpr>($1),unique_ptr<IndentifierExpr>(id));
+            $$->push_back(unique_ptr<VarDeclExpr>(arg));}
+      |  func_args T_COMMA val_type T_IDENTIFIER 
+            {auto id = new IndentifierExpr($4,false);
+            auto arg = new VarDeclExpr(unique_ptr<IndentifierExpr>($3),unique_ptr<IndentifierExpr>(id));
+            $1->push_back(unique_ptr<VarDeclExpr>(arg));
+            $$ = $1;}
+
+call_args : /*blank*/ {$$ = new CallArgs();}|
+            expr {$$ = new CallArgs();$$->push_back(unique_ptr<Expr>($1));}|
+            call_args T_COMMA expr {$1->push_back(unique_ptr<Expr>($3));}
+call_expr: T_IDENTIFIER T_LPAREN call_args T_RPAREN {auto callee = new IndentifierExpr($1,false);
+            $$ = new CallExpr(unique_ptr<IndentifierExpr>(callee),unique_ptr<CallArgs>($3));}
 %%

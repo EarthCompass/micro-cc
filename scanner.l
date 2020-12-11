@@ -33,6 +33,7 @@ using namespace std;
 "=="             { cout << "T_EQUAL: " << yytext << endl; return TOKEN(T_EQUAL);}
 "="              { cout << "T_ASSIGN: " << yytext << endl; return TOKEN(T_ASSIGN);}
 ";"              { cout << "T_SEMICOLON: " << yytext << endl; return TOKEN(T_SEMICOLON);}
+","              { cout << "T_COMMA: " << yytext << endl; return TOKEN(T_COMMA);}
 .                { cout << "UNKNOWN" << endl;}
 
 %%
