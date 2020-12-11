@@ -9,7 +9,8 @@ using namespace std;
 %option noyywrap
 %%
 "int"            { cout << "T_TYPE_INT: "<< yytext <<endl;SAVE_TOKEN;return T_TYPE_INT;}
-"double"            { cout << "T_TYPE_DOUBLE: "<< yytext <<endl;SAVE_TOKEN;return T_TYPE_DOUBLE;}
+"double"         { cout << "T_TYPE_DOUBLE: "<< yytext <<endl;SAVE_TOKEN;return T_TYPE_DOUBLE;}
+"return"         { cout <<"T_RETURN" << yytext <<endl; return T_RETURN; }
 [ \t\n]          ;
 [0-9]+\.[0-9]+   { cout << "T_DOUBLE: " << yytext << endl;SAVE_TOKEN;return T_DOUBLE;}
 [0-9]+           { cout << "T_INTEGER: " << yytext << endl;SAVE_TOKEN;return T_INTEGER;}
@@ -25,7 +26,13 @@ using namespace std;
 "/"              { cout << "T_DIV: " << yytext << endl; return  TOKEN(T_DIV);}
 "*"              { cout << "T_MUL: " << yytext << endl; return TOKEN(T_MUL);}
 "%"              { cout << "T_MOD: " << yytext << endl; return TOKEN(T_MOD);}
+">"              { cout << "T_GT: " << yytext << endl; return TOKEN(T_GT);}
+">="             { cout << "T_GE: " << yytext << endl; return TOKEN(T_GE);}
+"<"              { cout << "T_LT: " << yytext << endl; return TOKEN(T_LT);}
+"<="             { cout << "T_LE: " << yytext << endl; return TOKEN(T_LE);}
+"=="             { cout << "T_EQUAL: " << yytext << endl; return TOKEN(T_EQUAL);}
 "="              { cout << "T_ASSIGN: " << yytext << endl; return TOKEN(T_ASSIGN);}
 ";"              { cout << "T_SEMICOLON: " << yytext << endl; return TOKEN(T_SEMICOLON);}
 .                { cout << "UNKNOWN" << endl;}
+
 %%

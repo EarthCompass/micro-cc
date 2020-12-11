@@ -18,6 +18,8 @@ message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
 include_directories(${LLVM_INCLUDE_DIRS})
 add_definitions(${LLVM_DEFINITIONS})
 
+include_directories(${PROJECT_SOURCE_DIR})
+
 find_package(BISON)
 find_package(FLEX)
 FLEX_TARGET(scanner scanner.l ${PROJECT_BINARY_DIR}/scanner.cpp)
@@ -33,7 +35,7 @@ add_library(micro_c_parser ${BISON_parser_OUTPUTS}
               
 add_executable(micro-cc main.cpp)
 target_link_libraries(micro-cc micro_c_parser)
-find_library(LEX_LIB l)
+# find_library(LEX_LIB l)
 
 llvm_map_components_to_libnames(llvm_libs support core irreader)
 target_link_libraries(micro-cc ${LEX_LIB} ${llvm_libs})
