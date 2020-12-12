@@ -17,7 +17,7 @@
       Stmts * stmts;
       Stmt * stmt;
       Expr * expr;
-      IndentifierExpr * ident;
+      IdentifierExpr * ident;
       std::string* string;
       FuncDecArgsList* funcargs;
       CallArgs * callargs;
@@ -68,33 +68,33 @@ expr : T_INTEGER {$$ = new IntegerLiteralExpr(atol($1->c_str()));} |
       expr cmp_operator expr { $$ = new BinaryOperatorExpr($2,unique_ptr<Expr>($1),unique_ptr<Expr>($3)); } |
       T_LPAREN expr T_RPAREN { $$ = $2; }|
       expr T_ASSIGN expr{ $$ = new BinaryOperatorExpr($2,unique_ptr<Expr>($1),unique_ptr<Expr>($3)); } |
-      T_IDENTIFIER {$$ = new IndentifierExpr($1,false);}|
+      T_IDENTIFIER {$$ = new IdentifierExpr($1,false);}|
       call_expr
 
-val_type : T_TYPE_INT {$$ = new IndentifierExpr($1,true);} | 
-            T_TYPE_DOUBLE {$$ = new IndentifierExpr($1,true);}
-val_dec_stmt : val_type T_IDENTIFIER T_SEMICOLON{ auto id = new IndentifierExpr($2,false); $$ = new VarDeclStmt(unique_ptr<IndentifierExpr>($1),unique_ptr<IndentifierExpr>(id),nullptr);} |
-            val_type T_IDENTIFIER T_ASSIGN expr T_SEMICOLON{ auto id = new IndentifierExpr($2,false);$$ = new VarDeclStmt(unique_ptr<IndentifierExpr>($1),unique_ptr<IndentifierExpr>(id),unique_ptr<Expr>($4));}
+val_type : T_TYPE_INT {$$ = new IdentifierExpr($1,true);} |
+            T_TYPE_DOUBLE {$$ = new IdentifierExpr($1,true);}
+val_dec_stmt : val_type T_IDENTIFIER T_SEMICOLON{ auto id = new IdentifierExpr($2,false); $$ = new VarDeclStmt(unique_ptr<IdentifierExpr>($1),unique_ptr<IdentifierExpr>(id),nullptr);} |
+            val_type T_IDENTIFIER T_ASSIGN expr T_SEMICOLON{ auto id = new IdentifierExpr($2,false);$$ = new VarDeclStmt(unique_ptr<IdentifierExpr>($1),unique_ptr<IdentifierExpr>(id),unique_ptr<Expr>($4));}
 
 
 func_dec_stmt: val_type T_IDENTIFIER T_LPAREN func_args T_RPAREN compound_stmt 
-            { auto id = new IndentifierExpr($2,false); 
-            $$ = new FuncDeclStmt(unique_ptr<IndentifierExpr>($1),unique_ptr<IndentifierExpr>(id),unique_ptr<FuncDecArgsList>($4),unique_ptr<CompoundStmt>((microcc::CompoundStmt *)$6)); }
+            { auto id = new IdentifierExpr($2,false);
+            $$ = new FuncDeclStmt(unique_ptr<IdentifierExpr>($1),unique_ptr<IdentifierExpr>(id),unique_ptr<FuncDecArgsList>($4),unique_ptr<CompoundStmt>((microcc::CompoundStmt *)$6)); }
 
 func_args : /*blank*/ {$$ = new FuncDecArgsList();} |
       val_type T_IDENTIFIER {$$ = new FuncDecArgsList();
-            auto id = new IndentifierExpr($2,false);
-            auto arg = new VarDeclExpr(unique_ptr<IndentifierExpr>($1),unique_ptr<IndentifierExpr>(id));
+            auto id = new IdentifierExpr($2,false);
+            auto arg = new VarDeclExpr(unique_ptr<IdentifierExpr>($1),unique_ptr<IdentifierExpr>(id));
             $$->push_back(unique_ptr<VarDeclExpr>(arg));}
       |  func_args T_COMMA val_type T_IDENTIFIER 
-            {auto id = new IndentifierExpr($4,false);
-            auto arg = new VarDeclExpr(unique_ptr<IndentifierExpr>($3),unique_ptr<IndentifierExpr>(id));
+            {auto id = new IdentifierExpr($4,false);
+            auto arg = new VarDeclExpr(unique_ptr<IdentifierExpr>($3),unique_ptr<IdentifierExpr>(id));
             $1->push_back(unique_ptr<VarDeclExpr>(arg));
             $$ = $1;}
 
 call_args : /*blank*/ {$$ = new CallArgs();}|
             expr {$$ = new CallArgs();$$->push_back(unique_ptr<Expr>($1));}|
             call_args T_COMMA expr {$1->push_back(unique_ptr<Expr>($3));}
-call_expr: T_IDENTIFIER T_LPAREN call_args T_RPAREN {auto callee = new IndentifierExpr($1,false);
-            $$ = new CallExpr(unique_ptr<IndentifierExpr>(callee),unique_ptr<CallArgs>($3));}
+call_expr: T_IDENTIFIER T_LPAREN call_args T_RPAREN {auto callee = new IdentifierExpr($1,false);
+            $$ = new CallExpr(unique_ptr<IdentifierExpr>(callee),unique_ptr<CallArgs>($3));}
 %%

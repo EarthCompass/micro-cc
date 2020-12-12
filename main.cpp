@@ -1,11 +1,11 @@
 //
 // Created by Frank Xiang on 2020/11/13.
 //
-#include "stdio.h"
-#include "stdlib.h"
+#include <cstdio>
+#include <cstdlib>
+#include <iostream>
 #include "Nodes.hpp"
 #include "codegen.h"
-#include <iostream>
 extern FILE *yyin;
 extern int yyparse();
 extern int yylex();
@@ -19,6 +19,8 @@ int main(int argc, const char *args[]) {
   }
   auto p = yyparse();
   Mprogram->PrintAST(0);
+  CodeContext rootContext;
+  rootContext.IRGen(*Mprogram);
   // while (yylex()) {
   // }
   return 0;

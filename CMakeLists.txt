@@ -7,6 +7,7 @@ set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-deprecated-register")
 
 set(LLVM_DIR clang+llvm-11.0.0-x86_64-apple-darwin/lib/cmake/llvm)
+
 # file(COPY Nodes.hpp DESTINATION "${CMAKE_CURRENT_BINARY_DIR}")
 
 
@@ -26,14 +27,14 @@ FLEX_TARGET(scanner scanner.l ${PROJECT_BINARY_DIR}/scanner.cpp)
 BISON_TARGET(parser parser.y ${PROJECT_BINARY_DIR}/parser.cpp 
             DEFINES_FILE ${CMAKE_CURRENT_BINARY_DIR}/parser.h
             )
-
+include_directories(${CMAKE_CURRENT_BINARY_DIR})
 ADD_FLEX_BISON_DEPENDENCY(scanner parser)
 
 add_library(micro_c_parser ${BISON_parser_OUTPUTS}
               ${FLEX_scanner_OUTPUTS}
               )
               
-add_executable(micro-cc main.cpp)
+add_executable(micro-cc main.cpp codegen.h)
 target_link_libraries(micro-cc micro_c_parser)
 # find_library(LEX_LIB l)
 
