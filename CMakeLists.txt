@@ -38,5 +38,5 @@ add_executable(micro-cc main.cpp codegen.h)
 target_link_libraries(micro-cc micro_c_parser)
 # find_library(LEX_LIB l)
 
-llvm_map_components_to_libnames(llvm_libs support core irreader)
+llvm_map_components_to_libnames(llvm_libs support core irreader native)
 target_link_libraries(micro-cc ${LEX_LIB} ${llvm_libs})

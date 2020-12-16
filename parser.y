@@ -6,11 +6,11 @@
       using namespace std;
 }
 %code {
-      
       extern int yylex (void);
-      extern void yyerror(const char *s);
+      // extern void yyerror(const char *s);
       Stmts * Mprogram;
       extern int yyparse();
+      void yyerror(const char* s);
 }
 
 %union{
@@ -23,6 +23,8 @@
       CallArgs * callargs;
       int token;
 }
+%locations
+
 /* %token NUM VAR  */
 %token <string> T_INTEGER T_DOUBLE T_IDENTIFIER T_TYPE_INT T_TYPE_DOUBLE
 %token <token> T_ADD T_MINUS T_DIV T_MUL T_MOD T_ASSIGN T_GT T_GE T_LT T_LE T_EQUAL
@@ -44,8 +46,9 @@
 %%
 program : stmts {Mprogram = $1;};
 
-stmts : stmt {$$ = new Stmts(); $$->stmts.push_back(unique_ptr<Stmt>($1));}| 
+stmts : /*blank*/{} | stmt {$$ = new Stmts(); $$->stmts.push_back(unique_ptr<Stmt>($1));}| 
             stmts stmt {$1->stmts.push_back(unique_ptr<Stmt>($2));}
+            
 
 stmt : singleexprstmt {$$ = $1;} | val_dec_stmt | compound_stmt | func_dec_stmt | return_stmt 
 
@@ -60,7 +63,7 @@ cmp_operator : T_GT | T_GE | T_LT | T_LE | T_EQUAL
 
 expr : T_INTEGER {$$ = new IntegerLiteralExpr(atol($1->c_str()));} |
       T_DOUBLE {$$ = new DoubleLiteralExpr(strtod($1->c_str(),nullptr));} |
-      expr T_ADD expr { $$ = new BinaryOperatorExpr($2,unique_ptr<Expr>($1),unique_ptr<Expr>($3)); }|
+      expr T_ADD expr { $$ = new BinaryOperatorExpr($2,unique_ptr<Expr>($1),unique_ptr<Expr>($3)); cout<<@1.first_line;}|
       expr T_MOD expr { $$ = new BinaryOperatorExpr($2,unique_ptr<Expr>($1),unique_ptr<Expr>($3)); }|
       expr T_MINUS expr { $$ = new BinaryOperatorExpr($2,unique_ptr<Expr>($1),unique_ptr<Expr>($3)); } |
       expr T_MUL expr { $$ = new BinaryOperatorExpr($2,unique_ptr<Expr>($1),unique_ptr<Expr>($3)); } | 
@@ -98,3 +101,10 @@ call_args : /*blank*/ {$$ = new CallArgs();}|
 call_expr: T_IDENTIFIER T_LPAREN call_args T_RPAREN {auto callee = new IdentifierExpr($1,false);
             $$ = new CallExpr(unique_ptr<IdentifierExpr>(callee),unique_ptr<CallArgs>($3));}
 %%
+
+void yyerror(const char* s) {
+      // std::cout << "0ops, parse error!  Message: " << s << std::endl ;
+      std::cout << "0ops, parse error!  Message: " << s << " at "<<"line:"<<yylloc.first_line<<" col:"<<yylloc.first_column<<std::endl ;
+    // might as well halt now:
+      exit(-1);
+}

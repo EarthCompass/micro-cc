@@ -13,26 +13,42 @@ using namespace std;
 
 
 namespace microcc {
+
     class CodeContext {
     public:
         LLVMContext context;
         unique_ptr<Module> theModule;
         IRBuilder<> builder;
-        std::map<std::string, Value *> localSymbol;
-        void IRGen(Stmts&root){
-            cout<<"Generating IR code in context"<<endl;
-            Value * p = root.codeGen(*this);
-            p->print(errs());
+        std::map<std::string, AllocaInst *> localSymbol;
+
+        void IRGen(Stmts &root) {
+            cout << "Generating IR code in context" << endl;
+            std::vector<Type*> sysArgs;
+            FunctionType* mainFuncType = FunctionType::get(Type::getVoidTy(this->context), makeArrayRef(sysArgs), false);
+            Function* mainFunc = Function::Create(mainFuncType, GlobalValue::ExternalLinkage, "main",theModule.get());
+            BasicBlock* block = BasicBlock::Create(this->context, "entry",mainFunc);
+            builder.SetInsertPoint(block);
+            Value *p = root.codeGen(*this);
+            cout << "IR code:" << endl;
+            theModule->print(outs(), nullptr);
         }
-        CodeContext():builder(context){
-            std::make_unique<Module>("test", context);
+
+        CodeContext() : builder(context) {
+            theModule = std::make_unique<Module>("test", context);
+        }
+
+        Type *getType(const string& target) {
+            if (!target.empty()) {
+                if (target == "int")
+                    return Type::getInt32Ty(context);
+                else if (target == "double")
+                    return Type::getDoubleTy(context);
+                else
+                    return nullptr;
+            } else
+                return nullptr;
         }
     };
-
-    std::unique_ptr<Expr> LogError(const char *Str) {
-        fprintf(stderr, "Error: %s\n", Str);
-        return nullptr;
-    }
 
     Value *LogErrorV(const string &str) {
         fprintf(stderr, "Error: %s\n", str.c_str());
@@ -51,14 +67,21 @@ namespace microcc {
     }
 
     Value *IdentifierExpr::codeGen(CodeContext &context) {
-        cout << "Gen IdentifierRef:" << name << endl;
-        Value *V = context.localSymbol[name];
-        if (!V)
-            return LogErrorV("undefined variable\n");
-        return V;
+        if (!isType) {
+            cout << "Gen IdentifierRef:" << name << endl;
+            if (Value *V = context.localSymbol[name])
+                return context.builder.CreateLoad(V);
+            else if(auto G = context.theModule->getGlobalVariable(name))
+                return context.builder.CreateLoad(G);
+            else
+                return LogErrorV("undefined variable " + name + "\n");
+        }
+        else
+            return nullptr;
     }
 
     Value *BinaryOperatorExpr::codeGen(CodeContext &context) {
+        cout << "Gen BinaryOperatorExpr" << endl;
         Value *L = lhs->codeGen(context);
         Value *R = rhs->codeGen(context);
         if (op != T_ASSIGN) {
@@ -118,6 +141,38 @@ namespace microcc {
         }
     }
 
+    Value *VarDeclStmt::codeGen(CodeContext &context) {
+        cout << "Gen VarDeclStmt " << "Type:" << type->name << " Name:" << id->name << endl;
+        AllocaInst *p = nullptr;
+        if(isRoot){
+            GlobalVariable* G=nullptr;
+            if (type->name == "int") {
+                context.theModule->getOrInsertGlobal(id->name,Type::getInt32Ty(context.context));
+                G = context.theModule->getGlobalVariable(id->name);
+                G->setInitializer(ConstantInt::get(Type::getInt32Ty(context.context),0,true));
+            } else if (type->name == "double") {
+                context.theModule->getOrInsertGlobal(id->name,Type::getDoubleTy(context.context));
+                G = context.theModule->getGlobalVariable(id->name);
+                G->setInitializer(ConstantInt::get(Type::getDoubleTy(context.context),0,true));
+            }
+        }else{
+            if (type->name == "int") {
+                p = context.builder.CreateAlloca(Type::getInt32Ty(context.context));
+            } else if (type->name == "double") {
+                p = context.builder.CreateAlloca(Type::getDoubleTy(context.context));
+            }
+            context.localSymbol[id->name] = p;
+        }
+//        if (expr){
+//            Value * q = expr->codeGen(context);
+//            context.builder.Creas
+//        }
+        cout << "end" << endl;
+        return p;
+//        Value*p=context.builder.CreateAlloca()
+//        context.builder.CreateVa
+    }
+
     Value *SingleExprStmt::codeGen(CodeContext &context) {
         cout << "Gen SingleExprStmt" << endl;
         return expr->codeGen(context);
@@ -125,11 +180,27 @@ namespace microcc {
 
     Value *Stmts::codeGen(CodeContext &context) {
         cout << "Gen Stmts" << endl;
-        Value * p = nullptr;
+        Value *p = nullptr;
         for (auto &stmt:stmts) {
             if (stmt)
                 p = stmt->codeGen(context);
         }
         return p;
+    }
+
+    Value *FuncDeclStmt::codeGen(CodeContext &context) {
+        cout << "Gen FuncDeclStmt:" << endl;
+        cout << "Function return type:" << type->name << endl;
+        cout << "Function name:" << id->name << endl;
+        cout << "Function args:" << endl;
+
+        std::vector<Type*> argTypes;
+        for (auto &arg:*args) {
+            cout << "Type: " << arg->type->name << ",Name: " << arg->id->name << endl;
+            argTypes.push_back(context.getType(arg->type->name));
+        }
+        FunctionType * funcType = FunctionType::get(context.getType(type->name),argTypes,false);
+        Function * func = Function::Create(funcType,GlobalValue::ExternalLinkage,id->name,context.theModule.get());
+        return func;
     }
 }

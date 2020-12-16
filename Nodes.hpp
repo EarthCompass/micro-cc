@@ -14,14 +14,15 @@ namespace microcc {
 
     class Node {
     public:
+        bool isRoot = false;
+        int line;
+        int col;
         virtual llvm::Value *codeGen(CodeContext &context){return nullptr;}
-
         virtual void PrintAST(int level) {}
     };
 
     class Stmt : public Node {
     public:
-        // virtual void PrintAST(int level) {}
     };
 
     class Expr : public Node {
@@ -85,7 +86,7 @@ namespace microcc {
                            std::unique_ptr<Expr> rhs)
                 : op(op), lhs(std::move(lhs)), rhs(std::move(rhs)) {}
 
-        virtual void PrintAST(int level) {
+        void PrintAST(int level) override{
             // std::cout<<level<<"\n";
             PRINTTAB
             std::cout << "BinaryOperatorExpr :" << op << "\n";
@@ -117,6 +118,7 @@ namespace microcc {
             if (expr)
                 expr->PrintAST(level + 1);
         }
+        llvm::Value *codeGen(CodeContext &context) override;
     };
 
     class Stmts : public Stmt {
@@ -159,7 +161,9 @@ namespace microcc {
             PRINTTAB
             std::cout << "CompoundStmt"
                       << "\n";
-            stmts->PrintAST(level + 1);
+            if(stmts)
+                stmts->PrintAST(level + 1);
+
         }
     };
 
@@ -221,6 +225,7 @@ namespace microcc {
             std::cout << "function body: \n";
             funcBody->PrintAST(level + 1);
         }
+        llvm::Value * codeGen(CodeContext &context) override;
     };
 
     typedef std::vector<std::unique_ptr<Expr>> CallArgs;

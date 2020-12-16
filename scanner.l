@@ -5,7 +5,15 @@
 #define SAVE_TOKEN yylval.string = new string(yytext)
 #define TOKEN(t) ( yylval.token = t)
 using namespace std;
+int colnum = 0;
+#define YY_USER_ACTION {yylloc.first_line = yylineno; \
+        yylloc.first_column = colnum;                 \
+        colnum=colnum+yyleng;                         \
+        yylloc.last_column=colnum;                    \
+        yylloc.last_line = yylineno;}
+
 %}
+%option yylineno
 %option noyywrap
 %%
 "int"            { cout << "T_TYPE_INT: "<< yytext <<endl;SAVE_TOKEN;return T_TYPE_INT;}
