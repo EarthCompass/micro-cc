@@ -5,7 +5,7 @@
 #define SAVE_TOKEN yylval.string = new string(yytext)
 #define TOKEN(t) ( yylval.token = t)
 using namespace std;
-int colnum = 0;
+int colnum = 1;
 #define YY_USER_ACTION {yylloc.first_line = yylineno; \
         yylloc.first_column = colnum;                 \
         colnum=colnum+yyleng;                         \
@@ -18,8 +18,11 @@ int colnum = 0;
 %%
 "int"            { cout << "T_TYPE_INT: "<< yytext <<endl;SAVE_TOKEN;return T_TYPE_INT;}
 "double"         { cout << "T_TYPE_DOUBLE: "<< yytext <<endl;SAVE_TOKEN;return T_TYPE_DOUBLE;}
-"return"         { cout <<"T_RETURN" << yytext <<endl; return T_RETURN; }
-[ \t\n]          ;
+"return"         { cout << "T_RETURN" << yytext <<endl; return T_RETURN; }
+"if"             { cout << "T_IF" << yytext <<endl; return T_IF; }
+"else"           { cout << "T_ELSE" << yytext <<endl; return T_ELSE; }
+[ \t]            ;
+"\n"             { colnum = 1;}
 [0-9]+\.[0-9]+   { cout << "T_DOUBLE: " << yytext << endl;SAVE_TOKEN;return T_DOUBLE;}
 [0-9]+           { cout << "T_INTEGER: " << yytext << endl;SAVE_TOKEN;return T_INTEGER;}
 [a-zA-Z_][a-zA-Z0-9_]*     { cout << "T_IDENTIFIER: " << yytext << endl;SAVE_TOKEN;return T_IDENTIFIER;}

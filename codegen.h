@@ -1,10 +1,13 @@
+#include <stack>
 #include <llvm/IR/Value.h>
 #include <llvm/IR/Type.h>
 #include <llvm/IR/DerivedTypes.h>
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/LLVMContext.h>
 #include <llvm/IR/IRBuilder.h>
-#include <llvm/IR/LegacyPassManager.h>
+#include <llvm/IR/PassManager.h>
+#include <llvm/Target/TargetMachine.h>
+#include <llvm/Target/TargetOptions.h>
 #include "Nodes.hpp"
 #include "parser.h"
 
@@ -20,24 +23,32 @@ namespace microcc {
         unique_ptr<Module> theModule;
         IRBuilder<> builder;
         std::map<std::string, AllocaInst *> localSymbol;
+        std::stack<BasicBlock *> bbs;
 
         void IRGen(Stmts &root) {
             cout << "Generating IR code in context" << endl;
-            std::vector<Type*> sysArgs;
-            FunctionType* mainFuncType = FunctionType::get(Type::getVoidTy(this->context), makeArrayRef(sysArgs), false);
-            Function* mainFunc = Function::Create(mainFuncType, GlobalValue::ExternalLinkage, "main",theModule.get());
-            BasicBlock* block = BasicBlock::Create(this->context, "entry",mainFunc);
-            builder.SetInsertPoint(block);
+            std::vector<Type *> sysArgs;
+            BasicBlock *block = BasicBlock::Create(this->context, "entry");
+            this->pushBasicBlock(block);
             Value *p = root.codeGen(*this);
             cout << "IR code:" << endl;
+            if(!theModule->getFunction("main")){
+                cerr<<"\"main\" function not found"<<endl;
+            }
             theModule->print(outs(), nullptr);
         }
-
+        void ObjectGen(){
+            InitializeAllTargetInfos();
+            InitializeAllTargets();
+            InitializeAllTargetMCs();
+            InitializeAllAsmParsers();
+            InitializeAllAsmPrinters();
+        }
         CodeContext() : builder(context) {
             theModule = std::make_unique<Module>("test", context);
         }
 
-        Type *getType(const string& target) {
+        Type *getType(const string &target) {
             if (!target.empty()) {
                 if (target == "int")
                     return Type::getInt32Ty(context);
@@ -48,10 +59,27 @@ namespace microcc {
             } else
                 return nullptr;
         }
+        void pushBasicBlock(BasicBlock * p){
+            this->bbs.push(p);
+            this->builder.SetInsertPoint(this->bbs.top());
+        }
+        void popBasicBlock(){
+            this->bbs.pop();
+            this->builder.SetInsertPoint(this->bbs.top());
+        }
     };
 
-    Value *LogErrorV(const string &str) {
-        fprintf(stderr, "Error: %s\n", str.c_str());
+    bool isOutsideFunction(CodeContext &context) {
+        return context.builder.GetInsertBlock()->getParent() == nullptr;
+    }
+
+    Value *LogErrorV(const string &str, Node *loc = nullptr) {
+        if (loc) {
+            fprintf(stderr, "Error: %s at %d:%d\n", str.c_str(), loc->line, loc->col);
+        } else {
+            fprintf(stderr, "Error: %s\n", str.c_str());
+        }
+        exit(1);
         return nullptr;
     }
 
@@ -68,15 +96,26 @@ namespace microcc {
 
     Value *IdentifierExpr::codeGen(CodeContext &context) {
         if (!isType) {
-            cout << "Gen IdentifierRef:" << name << endl;
-            if (Value *V = context.localSymbol[name])
-                return context.builder.CreateLoad(V);
-            else if(auto G = context.theModule->getGlobalVariable(name))
-                return context.builder.CreateLoad(G);
-            else
-                return LogErrorV("undefined variable " + name + "\n");
-        }
-        else
+            if (isRef) {
+                this->isMutable  = true;
+                cout << "Gen IdentifierRef:" << name << endl;
+                if (isOutsideFunction(context))
+                    return LogErrorV("Can not ref var " + name + " out side function ", this);
+                else if (Value *V = context.localSymbol[name])
+                    if(1)
+                        return V;
+                    else
+                        return context.builder.CreateLoad(V);
+                else if (auto G = context.theModule->getGlobalVariable(name))
+                    if(1)
+                        return G;
+                    else
+                        return context.builder.CreateLoad(G);
+                else
+                    return LogErrorV("undefined variable " + name, this);
+            } else
+                return nullptr;
+        } else
             return nullptr;
     }
 
@@ -85,6 +124,11 @@ namespace microcc {
         Value *L = lhs->codeGen(context);
         Value *R = rhs->codeGen(context);
         if (op != T_ASSIGN) {
+            this->isMutable=false;
+            if(lhs->isMutable)
+                L = context.builder.CreateLoad(L);
+            if(rhs->isMutable)
+                R = context.builder.CreateLoad(R);
             bool hasDouble = false;
             if (L->getType()->getTypeID() == Type::DoubleTyID || R->getType()->getTypeID() == Type::DoubleTyID) {
                 if (L->getType()->getTypeID() == Type::DoubleTyID) {
@@ -132,45 +176,61 @@ namespace microcc {
                                                                                                                      R,
                                                                                                                      "cmpeqst");
                 default:
-                    return LogErrorV("unknown...\n");
+                    return LogErrorV("unknown...", this);
             }
-
-
         } else {
-            return LogErrorV("to do...\n");
+            if(!lhs->isMutable)
+                return LogErrorV("Left value is not mutable",this);
+            if(rhs->isMutable)
+                R = context.builder.CreateLoad(R);
+            context.builder.CreateStore(R,L);
+            this->isMutable = true;
+            return L;
         }
     }
 
     Value *VarDeclStmt::codeGen(CodeContext &context) {
         cout << "Gen VarDeclStmt " << "Type:" << type->name << " Name:" << id->name << endl;
         AllocaInst *p = nullptr;
-        if(isRoot){
-            GlobalVariable* G=nullptr;
+        Value * q = nullptr;
+        if (expr){
+            q = expr->codeGen(context);
+        }
+        if (isRoot) {
+            GlobalVariable *G = nullptr;
             if (type->name == "int") {
-                context.theModule->getOrInsertGlobal(id->name,Type::getInt32Ty(context.context));
+                context.theModule->getOrInsertGlobal(id->name, Type::getInt32Ty(context.context));
                 G = context.theModule->getGlobalVariable(id->name);
-                G->setInitializer(ConstantInt::get(Type::getInt32Ty(context.context),0,true));
+                if(!q)
+                    G->setInitializer(ConstantInt::get(Type::getInt32Ty(context.context), 0, true));
+                else
+                    G->setInitializer(dyn_cast<llvm::ConstantInt>(q));
             } else if (type->name == "double") {
-                context.theModule->getOrInsertGlobal(id->name,Type::getDoubleTy(context.context));
+                context.theModule->getOrInsertGlobal(id->name, Type::getDoubleTy(context.context));
                 G = context.theModule->getGlobalVariable(id->name);
-                G->setInitializer(ConstantInt::get(Type::getDoubleTy(context.context),0,true));
+                if(!q)
+                    G->setInitializer(ConstantInt::get(Type::getDoubleTy(context.context), 0, true));
+                else
+                    G->setInitializer(dyn_cast<llvm::ConstantFP>(q));
             }
-        }else{
+        } else {
+            if(context.localSymbol[id->name]){
+                return LogErrorV("redefine var "+id->name,this);
+            }
             if (type->name == "int") {
                 p = context.builder.CreateAlloca(Type::getInt32Ty(context.context));
             } else if (type->name == "double") {
                 p = context.builder.CreateAlloca(Type::getDoubleTy(context.context));
+            }else{
+                return LogErrorV("unknown type",this);
             }
+            if(q)
+                context.builder.CreateStore(q,p);
             context.localSymbol[id->name] = p;
         }
-//        if (expr){
-//            Value * q = expr->codeGen(context);
-//            context.builder.Creas
-//        }
+
         cout << "end" << endl;
         return p;
-//        Value*p=context.builder.CreateAlloca()
-//        context.builder.CreateVa
     }
 
     Value *SingleExprStmt::codeGen(CodeContext &context) {
@@ -188,19 +248,45 @@ namespace microcc {
         return p;
     }
 
+    Value * CompoundStmt::codeGen(CodeContext &context) {
+        if(stmts)
+            return stmts->codeGen(context);
+        else
+            return nullptr;
+    }
+
     Value *FuncDeclStmt::codeGen(CodeContext &context) {
+        if(!isOutsideFunction(context)){
+            return LogErrorV("can not define function inside function",this);
+        }
         cout << "Gen FuncDeclStmt:" << endl;
         cout << "Function return type:" << type->name << endl;
         cout << "Function name:" << id->name << endl;
         cout << "Function args:" << endl;
-
-        std::vector<Type*> argTypes;
+        context.localSymbol.clear();
+        std::vector<Type *> argTypes;
+        std::vector<string> argNames;
         for (auto &arg:*args) {
             cout << "Type: " << arg->type->name << ",Name: " << arg->id->name << endl;
+            argNames.push_back(arg->id->name);
             argTypes.push_back(context.getType(arg->type->name));
         }
-        FunctionType * funcType = FunctionType::get(context.getType(type->name),argTypes,false);
-        Function * func = Function::Create(funcType,GlobalValue::ExternalLinkage,id->name,context.theModule.get());
+        FunctionType *funcType = FunctionType::get(context.getType(type->name), argTypes, false);
+        Function *func = Function::Create(funcType, GlobalValue::ExternalLinkage, id->name, context.theModule.get());
+        BasicBlock *currentFuncStart = BasicBlock::Create(context.context, id->name + "_entry", func);
+        context.pushBasicBlock(currentFuncStart);
+        auto p_name = argNames.begin();
+        for (auto &inner_arg:func->args()){
+            AllocaInst * p = context.builder.CreateAlloca(inner_arg.getType());
+            context.localSymbol[*p_name] = p;
+            context.builder.CreateStore(&inner_arg,p);
+            p_name++;
+        }
+        funcBody->codeGen(context);
+        context.popBasicBlock();
         return func;
+    }
+    Value * ReturnStmt::codeGen(CodeContext &context) {
+
     }
 }
