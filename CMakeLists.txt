@@ -8,8 +8,6 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-deprecated-register")
 
 set(LLVM_DIR clang+llvm-11.0.0-x86_64-apple-darwin/lib/cmake/llvm)
 
-# file(COPY Nodes.hpp DESTINATION "${CMAKE_CURRENT_BINARY_DIR}")
-
 
 find_package(LLVM)
 
@@ -39,4 +37,7 @@ target_link_libraries(micro-cc micro_c_parser)
 # find_library(LEX_LIB l)
 
 llvm_map_components_to_libnames(llvm_libs support core irreader native)
+#execute_process(COMMAND ${LLVM_INCLUDE_DIRS}/../bin/llvm-config --libs all
+#        RESULT_VARIABLE llvm_libs)
+message(STATUS "LLVM libs: ${llvm_libs}")
 target_link_libraries(micro-cc ${LEX_LIB} ${llvm_libs})

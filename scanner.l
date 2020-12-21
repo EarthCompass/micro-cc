@@ -21,6 +21,8 @@ int colnum = 1;
 "return"         { cout << "T_RETURN" << yytext <<endl; return T_RETURN; }
 "if"             { cout << "T_IF" << yytext <<endl; return T_IF; }
 "else"           { cout << "T_ELSE" << yytext <<endl; return T_ELSE; }
+"while"          { cout << "T_WHILE" << yytext <<endl; return T_WHILE; }
+\"[\\.|^\"]*\"
 [ \t]            ;
 "\n"             { colnum = 1;}
 [0-9]+\.[0-9]+   { cout << "T_DOUBLE: " << yytext << endl;SAVE_TOKEN;return T_DOUBLE;}

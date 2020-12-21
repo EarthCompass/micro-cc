@@ -4,7 +4,6 @@
 #include <cstdio>
 #include <cstdlib>
 #include <iostream>
-#include <llvm/Support/TargetSelect.h>
 #include "Nodes.hpp"
 #include "codegen.h"
 
@@ -21,9 +20,7 @@ int main(int argc, const char *args[]) {
         fprintf(stderr, "can not open %s\n", args[1]);
         exit(1);
     }
-    InitializeNativeTarget();
-    InitializeNativeTargetAsmPrinter();
-    InitializeNativeTargetAsmParser();
+
     yyparse();
     for (auto &s:Mprogram->stmts){
         s->isRoot = true;
@@ -31,6 +28,8 @@ int main(int argc, const char *args[]) {
     Mprogram->PrintAST(0);
     CodeContext rootContext;
     rootContext.IRGen(*Mprogram);
+    rootContext.ObjectGen();
+//    rootContext.ObjectGen();
     // while (yylex()) {
     // }
     return 0;

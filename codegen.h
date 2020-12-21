@@ -1,19 +1,25 @@
-#include <stack>
 #include <llvm/IR/Value.h>
 #include <llvm/IR/Type.h>
 #include <llvm/IR/DerivedTypes.h>
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/LLVMContext.h>
 #include <llvm/IR/IRBuilder.h>
-#include <llvm/IR/PassManager.h>
+#include <llvm/IR/LegacyPassManager.h>
 #include <llvm/Target/TargetMachine.h>
 #include <llvm/Target/TargetOptions.h>
+#include <llvm/Support/FileSystem.h>
+#include <llvm/Support/Host.h>
+#include <llvm/Support/raw_ostream.h>
+#include <llvm/Support/TargetRegistry.h>
+#include <llvm/Support/TargetSelect.h>
+#include <llvm/Support/Error.h>
 #include "Nodes.hpp"
 #include "parser.h"
 
 using namespace llvm;
 using namespace std;
 
+typedef std::map<std::string, AllocaInst *> localSymbolTable;
 
 namespace microcc {
 
@@ -24,6 +30,7 @@ namespace microcc {
         IRBuilder<> builder;
         std::map<std::string, AllocaInst *> localSymbol;
         std::stack<BasicBlock *> bbs;
+        std::vector<localSymbolTable *> localSymbolStack;
 
         void IRGen(Stmts &root) {
             cout << "Generating IR code in context" << endl;
@@ -32,18 +39,43 @@ namespace microcc {
             this->pushBasicBlock(block);
             Value *p = root.codeGen(*this);
             cout << "IR code:" << endl;
-            if(!theModule->getFunction("main")){
-                cerr<<"\"main\" function not found"<<endl;
+            if (!theModule->getFunction("main")) {
+                cerr << "\"main\" function not found" << endl;
             }
             theModule->print(outs(), nullptr);
         }
-        void ObjectGen(){
-            InitializeAllTargetInfos();
-            InitializeAllTargets();
-            InitializeAllTargetMCs();
-            InitializeAllAsmParsers();
-            InitializeAllAsmPrinters();
+
+        void ObjectGen() {
+            InitializeNativeTarget();
+            InitializeNativeTargetAsmPrinter();
+            InitializeNativeTargetAsmParser();
+            auto TargetTriple = llvm::sys::getDefaultTargetTriple();
+            std::string Error;
+            auto Target = TargetRegistry::lookupTarget(TargetTriple, Error);
+            if (!Target) {
+                errs() << Error;
+                return;
+            }
+            auto CPU = "generic";
+            auto Features = "";
+            TargetOptions opt;
+            auto RM = Optional<Reloc::Model>();
+            auto TargetMachine = Target->createTargetMachine(TargetTriple, CPU, Features, opt, RM);
+            theModule->setDataLayout(TargetMachine->createDataLayout());
+            theModule->setTargetTriple(TargetTriple);
+            auto Filename = "output.o";
+            std::error_code EC;
+            raw_fd_ostream dest(Filename, EC, sys::fs::OF_None);
+            legacy::PassManager pass;
+            auto FileType = CGFT_ObjectFile;
+            if (TargetMachine->addPassesToEmitFile(pass, dest, nullptr, FileType)) {
+                errs() << "TargetMachine can't emit a file of this type";
+                return;
+            }
+            pass.run(*theModule);
+            dest.flush();
         }
+
         CodeContext() : builder(context) {
             theModule = std::make_unique<Module>("test", context);
         }
@@ -59,17 +91,39 @@ namespace microcc {
             } else
                 return nullptr;
         }
-        void pushBasicBlock(BasicBlock * p){
+
+        inline void pushBasicBlock(BasicBlock *p) {
             this->bbs.push(p);
             this->builder.SetInsertPoint(this->bbs.top());
         }
-        void popBasicBlock(){
+
+        inline void popBasicBlock() {
             this->bbs.pop();
             this->builder.SetInsertPoint(this->bbs.top());
         }
+
+        inline void pushLocalSymbolTable() {
+            this->localSymbolStack.push_back(new localSymbolTable);
+        }
+
+        inline void popLocalSymbolTable() {
+            this->localSymbolStack.pop_back();
+        }
+
+        Value *findSymbolInStack(string &name) {
+            for (auto p = this->localSymbolStack.size() - 1; ~p; p--) {
+                if (this->localSymbolStack[p]->count(name))
+                    return (*this->localSymbolStack[p])[name];
+            }
+            return nullptr;
+        }
+
+        inline localSymbolTable *getCurrentLocalSymbolTable() {
+            return *(this->localSymbolStack.end() - 1);
+        }
     };
 
-    bool isOutsideFunction(CodeContext &context) {
+    inline bool isOutsideFunction(CodeContext &context) {
         return context.builder.GetInsertBlock()->getParent() == nullptr;
     }
 
@@ -97,20 +151,14 @@ namespace microcc {
     Value *IdentifierExpr::codeGen(CodeContext &context) {
         if (!isType) {
             if (isRef) {
-                this->isMutable  = true;
+                this->isMutable = true;
                 cout << "Gen IdentifierRef:" << name << endl;
                 if (isOutsideFunction(context))
                     return LogErrorV("Can not ref var " + name + " out side function ", this);
-                else if (Value *V = context.localSymbol[name])
-                    if(1)
-                        return V;
-                    else
-                        return context.builder.CreateLoad(V);
+                else if (Value *V = context.findSymbolInStack(name))
+                    return V;
                 else if (auto G = context.theModule->getGlobalVariable(name))
-                    if(1)
-                        return G;
-                    else
-                        return context.builder.CreateLoad(G);
+                    return G;
                 else
                     return LogErrorV("undefined variable " + name, this);
             } else
@@ -124,12 +172,14 @@ namespace microcc {
         Value *L = lhs->codeGen(context);
         Value *R = rhs->codeGen(context);
         if (op != T_ASSIGN) {
-            this->isMutable=false;
-            if(lhs->isMutable)
+            this->isMutable = false;
+            if (lhs->isMutable)
                 L = context.builder.CreateLoad(L);
-            if(rhs->isMutable)
+            if (rhs->isMutable)
                 R = context.builder.CreateLoad(R);
             bool hasDouble = false;
+
+            // TODO: more type cast
             if (L->getType()->getTypeID() == Type::DoubleTyID || R->getType()->getTypeID() == Type::DoubleTyID) {
                 if (L->getType()->getTypeID() == Type::DoubleTyID) {
                     R = context.builder.CreateSIToFP(R, Type::getDoubleTy(context.context), "si2dt");
@@ -179,11 +229,11 @@ namespace microcc {
                     return LogErrorV("unknown...", this);
             }
         } else {
-            if(!lhs->isMutable)
-                return LogErrorV("Left value is not mutable",this);
-            if(rhs->isMutable)
+            if (!lhs->isMutable)
+                return LogErrorV("Left value is not mutable", this);
+            if (rhs->isMutable)
                 R = context.builder.CreateLoad(R);
-            context.builder.CreateStore(R,L);
+            context.builder.CreateStore(R, L);
             this->isMutable = true;
             return L;
         }
@@ -192,8 +242,8 @@ namespace microcc {
     Value *VarDeclStmt::codeGen(CodeContext &context) {
         cout << "Gen VarDeclStmt " << "Type:" << type->name << " Name:" << id->name << endl;
         AllocaInst *p = nullptr;
-        Value * q = nullptr;
-        if (expr){
+        Value *q = nullptr;
+        if (expr) {
             q = expr->codeGen(context);
         }
         if (isRoot) {
@@ -201,32 +251,32 @@ namespace microcc {
             if (type->name == "int") {
                 context.theModule->getOrInsertGlobal(id->name, Type::getInt32Ty(context.context));
                 G = context.theModule->getGlobalVariable(id->name);
-                if(!q)
+                if (!expr)
                     G->setInitializer(ConstantInt::get(Type::getInt32Ty(context.context), 0, true));
                 else
                     G->setInitializer(dyn_cast<llvm::ConstantInt>(q));
             } else if (type->name == "double") {
                 context.theModule->getOrInsertGlobal(id->name, Type::getDoubleTy(context.context));
                 G = context.theModule->getGlobalVariable(id->name);
-                if(!q)
+                if (!expr)
                     G->setInitializer(ConstantInt::get(Type::getDoubleTy(context.context), 0, true));
                 else
                     G->setInitializer(dyn_cast<llvm::ConstantFP>(q));
             }
         } else {
-            if(context.localSymbol[id->name]){
-                return LogErrorV("redefine var "+id->name,this);
+            if (context.getCurrentLocalSymbolTable()->count(id->name)) {
+                return LogErrorV("redefine var " + id->name, this);
             }
             if (type->name == "int") {
                 p = context.builder.CreateAlloca(Type::getInt32Ty(context.context));
             } else if (type->name == "double") {
                 p = context.builder.CreateAlloca(Type::getDoubleTy(context.context));
-            }else{
-                return LogErrorV("unknown type",this);
+            } else {
+                return LogErrorV("unknown type", this);
             }
-            if(q)
-                context.builder.CreateStore(q,p);
-            context.localSymbol[id->name] = p;
+            if (q)
+                context.builder.CreateStore(q, p);
+            (*context.getCurrentLocalSymbolTable())[id->name] = p;
         }
 
         cout << "end" << endl;
@@ -248,16 +298,21 @@ namespace microcc {
         return p;
     }
 
-    Value * CompoundStmt::codeGen(CodeContext &context) {
-        if(stmts)
-            return stmts->codeGen(context);
-        else
+    Value *CompoundStmt::codeGen(CodeContext &context) {
+        if (stmts) {
+            if (!this->isFunctionBody)
+                context.pushLocalSymbolTable();
+            Value *p = stmts->codeGen(context);
+            if (!this->isFunctionBody)
+                context.popLocalSymbolTable();
+            return p;
+        } else
             return nullptr;
     }
 
     Value *FuncDeclStmt::codeGen(CodeContext &context) {
-        if(!isOutsideFunction(context)){
-            return LogErrorV("can not define function inside function",this);
+        if (!isOutsideFunction(context)) {
+            return LogErrorV("can not define function inside function", this);
         }
         cout << "Gen FuncDeclStmt:" << endl;
         cout << "Function return type:" << type->name << endl;
@@ -274,19 +329,94 @@ namespace microcc {
         FunctionType *funcType = FunctionType::get(context.getType(type->name), argTypes, false);
         Function *func = Function::Create(funcType, GlobalValue::ExternalLinkage, id->name, context.theModule.get());
         BasicBlock *currentFuncStart = BasicBlock::Create(context.context, id->name + "_entry", func);
+        context.pushLocalSymbolTable();
         context.pushBasicBlock(currentFuncStart);
         auto p_name = argNames.begin();
-        for (auto &inner_arg:func->args()){
-            AllocaInst * p = context.builder.CreateAlloca(inner_arg.getType());
-            context.localSymbol[*p_name] = p;
-            context.builder.CreateStore(&inner_arg,p);
+        for (auto &inner_arg:func->args()) {
+            AllocaInst *p = context.builder.CreateAlloca(inner_arg.getType());
+            (*context.getCurrentLocalSymbolTable())[*p_name] = p;
+            context.builder.CreateStore(&inner_arg, p);
             p_name++;
         }
         funcBody->codeGen(context);
         context.popBasicBlock();
+        context.popLocalSymbolTable();
         return func;
     }
-    Value * ReturnStmt::codeGen(CodeContext &context) {
 
+    Value *ReturnStmt::codeGen(CodeContext &context) {
+        cout << "Gen ReturnStmt" << endl;
+        Value *ret = expr->codeGen(context);
+        if (expr->isMutable) {
+            ret = context.builder.CreateLoad(ret);
+        }
+        context.builder.CreateRet(ret);
+    }
+
+    Value *CallExpr::codeGen(CodeContext &context) {
+        cout << "Gen CallExpr" << endl;
+        cout << "Callee: "<<callee->name<<endl;
+        Function * calleePtr = context.theModule->getFunction(callee->name);
+        if(!calleePtr)
+            return LogErrorV("call undefined function",this);
+        else if(args->size()!=calleePtr->arg_size())
+            return LogErrorV("function args count mismatch",this);
+        else{
+            vector<Value *> argsToPass;
+            for (auto & argExpr:*args) {
+                Value *p = argExpr->codeGen(context);
+                if(argExpr->isMutable)
+                    p = context.builder.CreateLoad(p);
+                argsToPass.push_back(p);
+            }
+            return context.builder.CreateCall(calleePtr,argsToPass,"call");
+        }
+    }
+    Value * IfStmt::codeGen(CodeContext &context) {
+        Value * con = condition->codeGen(context);
+        Function * currentFunction = context.builder.GetInsertBlock()->getParent();
+        BasicBlock * trueBlock = BasicBlock::Create(context.context,"iftrue",currentFunction);
+        BasicBlock * falseBlock = nullptr;
+        if(elseStmts)
+            falseBlock = BasicBlock::Create(context.context,"iffalse",currentFunction);
+        BasicBlock * followBlock = BasicBlock::Create(context.context,"iffollow",currentFunction);
+        if(elseStmts)
+            context.builder.CreateCondBr(con,trueBlock,falseBlock);
+        else
+            context.builder.CreateCondBr(con,trueBlock,followBlock);
+        context.pushBasicBlock(trueBlock);
+        this->ifStmts->codeGen(context);
+        context.builder.CreateBr(followBlock);
+        context.popBasicBlock();
+        if(elseStmts){
+            context.pushBasicBlock(falseBlock);
+            this->elseStmts->codeGen(context);
+            context.builder.CreateBr(followBlock);
+            context.popBasicBlock();
+        }
+        context.popBasicBlock();
+        context.pushBasicBlock(followBlock);
+        return nullptr;
+    }
+    Value * WhileStmt::codeGen(CodeContext &context) {
+        Function * currentFunction = context.builder.GetInsertBlock()->getParent();
+        BasicBlock * conBlock = BasicBlock::Create(context.context,"whilecondition",currentFunction);
+        BasicBlock * bodyBlock = BasicBlock::Create(context.context,"whilebody",currentFunction);
+        BasicBlock * followBlock = BasicBlock::Create(context.context,"whilefollow",currentFunction);
+        //condition
+        context.builder.CreateBr(conBlock);
+        context.popBasicBlock();
+        context.pushBasicBlock(conBlock);
+        Value * con = condition->codeGen(context);
+        context.builder.CreateCondBr(con,bodyBlock,followBlock);
+        context.popBasicBlock();
+        //while body
+        context.pushBasicBlock(bodyBlock);
+        body->codeGen(context);
+        context.builder.CreateBr(conBlock);
+        context.popBasicBlock();
+
+        context.pushBasicBlock(followBlock);
+        return nullptr;
     }
 }

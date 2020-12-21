@@ -5,8 +5,8 @@
 #include <vector>
 
 #define PRINTTAB                                                               \
-  for (size_t _iiii = 0; _iiii < level; _iiii++) {                                     \
-    std::cout << "  ";                                                     \
+  for (size_t _iiii = 0; _iiii < level; _iiii++) {                             \
+    std::cout << "  ";                                                         \
   }
 
 namespace microcc {
@@ -15,9 +15,11 @@ namespace microcc {
     class Node {
     public:
         bool isRoot = false;
-        int line=-1;
-        int col=-1;
+        int line = -1;
+        int col = -1;
+
         virtual void PrintAST(int level) {}
+
         virtual llvm::Value *codeGen(CodeContext &context) { return nullptr; }
 
     };
@@ -29,8 +31,8 @@ namespace microcc {
 
     class Expr : public Node {
     public:
-        bool isMutable=false;
-        bool isAssign=false;
+        bool isMutable = false;
+        bool isAssign = false;
 
     };
 
@@ -182,6 +184,7 @@ namespace microcc {
     class CompoundStmt : public Stmt {
     public:
         std::unique_ptr<Stmts> stmts;
+        bool isFunctionBody = false;
 
         explicit CompoundStmt(std::unique_ptr<Stmts> stmts,
                               int line1, int col1)
@@ -198,6 +201,7 @@ namespace microcc {
                 stmts->PrintAST(level + 1);
 
         }
+
         llvm::Value *codeGen(CodeContext &context) override;
 
     };
@@ -216,6 +220,7 @@ namespace microcc {
             std::cout << "ReturnStmt" << "\n";
             expr->PrintAST(level + 1);
         }
+
         llvm::Value *codeGen(CodeContext &context) override;
     };
 
@@ -249,6 +254,7 @@ namespace microcc {
                 type(std::move(type)), id(std::move(id)), args(std::move(args)), funcBody(std::move(funcBody)) {
             line = line1;
             col = col1;
+            this->funcBody->isFunctionBody = true;
         };
 
         void PrintAST(int level) override {
@@ -299,8 +305,41 @@ namespace microcc {
                 arg->PrintAST(level + 1);
             }
         }
+
+        llvm::Value *codeGen(CodeContext &context) override;
+
     };
 
     class IfStmt : public Stmt {
+    public:
+        std::unique_ptr<Expr> condition;
+        std::unique_ptr<Stmt> ifStmts;
+        std::unique_ptr<Stmt> elseStmts;
+
+        IfStmt(std::unique_ptr<Expr> condition, std::unique_ptr<Stmt> ifStmts,
+               std::unique_ptr<Stmt> elseStmts, int line1, int col1) : condition(std::move(condition)),
+                                                                       ifStmts(std::move(ifStmts)),
+                                                                       elseStmts(std::move(elseStmts)) {
+            col = col1;
+            line = line1;
+        }
+
+        llvm::Value *codeGen(CodeContext &context) override;
     };
+
+    class WhileStmt : public Stmt {
+    public:
+        std::unique_ptr<Expr> condition;
+        std::unique_ptr<Stmt> body;
+
+        WhileStmt(std::unique_ptr<Expr> condition,
+                  std::unique_ptr<Stmt> body, int line1, int col1) : condition(std::move(condition)),
+                                                                     body(std::move(body)) {
+            col = col1;
+            line = line1;
+        }
+
+        llvm::Value *codeGen(CodeContext &context) override;
+    };
+
 } // namespace microcc

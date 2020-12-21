@@ -1,0 +1,19 @@
+int a=1;
+double aaa=22.0+33;
+int add(int a,int b){
+    return a+b;
+}
+int main(){
+    int ss;
+    ss=111;
+    int qq = add(ss,1);
+    if(qq<11){
+        ss=1;
+    }else{
+        ss=2;
+    }
+    while(a<5){
+            a=a+1;
+    }
+    return a;
+}
