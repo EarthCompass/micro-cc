@@ -16,11 +16,13 @@ extern int yyparse();
 extern int yylex();
 extern microcc::Stmts *Mprogram;
 
-cl::opt<string> outputObjFilename("obj", cl::desc("Specify output obj filename"), cl::value_desc("filename"), cl::Required);
-cl::opt<string> inputFilename(cl::Positional, cl::desc("<input file>"), cl::Required);
+
 cl::opt<bool> emitIR ("emit-ir", cl::desc("Print IR to stdout"));
 cl::opt<bool> verbose ("v", cl::desc("Show more message"));
 cl::opt<bool> printAST ("ast", cl::desc("Print AST to stdout"));
+cl::opt<string> outputFilename("o", cl::desc("Specify output filename, micro-cc will try to generate executable file using system cc if this is set"), cl::value_desc("filename"));
+cl::opt<string> outputObjFilename("obj", cl::desc("Specify output obj filename"), cl::value_desc("filename"));
+cl::opt<string> inputFilename(cl::Positional, cl::desc("<input file>"), cl::Required);
 
 void version(raw_ostream & stream){
     WithColor(stream)<<"Micro C Compiler built by Ear7hC\n";
@@ -42,7 +44,13 @@ int main(int argc, const char *argv[]) {
     }
     CodeContext rootContext;
     rootContext.IRGen(*Mprogram);
-    rootContext.ObjectGen(outputObjFilename);
+    if(!outputFilename.empty()){
+        rootContext.ObjectGen(outputObjFilename);
+        if(!outputFilename.empty()){
+            string s ="cc "+outputObjFilename+" -o "+outputFilename;
+            system(s.c_str());
+        }
+    }
 
     return 0;
 }

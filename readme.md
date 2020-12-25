@@ -1,7 +1,3 @@
-### AST
-
-* Statement
-
 ### Reference
 
 1. https://gnuu.org/2009/09/18/writing-your-own-toy-compiler/
