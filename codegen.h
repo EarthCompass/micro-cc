@@ -15,11 +15,14 @@
 #include <llvm/Support/Error.h>
 #include "Nodes.hpp"
 #include "parser.h"
+#define VERBOSE if(verbose)
 
 using namespace llvm;
 using namespace std;
 
 typedef std::map<std::string, AllocaInst *> localSymbolTable;
+extern cl::opt<bool> emitIR;
+extern cl::opt<bool> verbose;
 
 namespace microcc {
 
@@ -33,19 +36,26 @@ namespace microcc {
         std::vector<localSymbolTable *> localSymbolStack;
 
         void IRGen(Stmts &root) {
+            VERBOSE
             cout << "Generating IR code in context" << endl;
             std::vector<Type *> sysArgs;
             BasicBlock *block = BasicBlock::Create(this->context, "entry");
+
             this->pushBasicBlock(block);
+            FunctionType * printfType =  FunctionType::get(Type::getInt32Ty(context),true);
+            Function::Create(printfType, GlobalValue::ExternalLinkage, "printf", this->theModule.get());
+//            Function::Create()
             Value *p = root.codeGen(*this);
-            cout << "IR code:" << endl;
             if (!theModule->getFunction("main")) {
                 cerr << "\"main\" function not found" << endl;
             }
-            theModule->print(outs(), nullptr);
+            if(emitIR){
+                cout << "IR code:" << endl;
+                theModule->print(outs(), nullptr);
+            }
         }
 
-        void ObjectGen() {
+        void ObjectGen(std::string outputFileName) {
             InitializeNativeTarget();
             InitializeNativeTargetAsmPrinter();
             InitializeNativeTargetAsmParser();
@@ -63,7 +73,7 @@ namespace microcc {
             auto TargetMachine = Target->createTargetMachine(TargetTriple, CPU, Features, opt, RM);
             theModule->setDataLayout(TargetMachine->createDataLayout());
             theModule->setTargetTriple(TargetTriple);
-            auto Filename = "output.o";
+            auto Filename = outputFileName;
             std::error_code EC;
             raw_fd_ostream dest(Filename, EC, sys::fs::OF_None);
             legacy::PassManager pass;
@@ -138,20 +148,27 @@ namespace microcc {
     }
 
     Value *IntegerLiteralExpr::codeGen(CodeContext &context) {
+        VERBOSE
         cout << "Gen IntegerLiteral:" << value << endl;
         // return (llvm::Value*)0;
         return ConstantInt::get(Type::getInt32Ty(context.context), value, true);
     }
 
     Value *DoubleLiteralExpr::codeGen(CodeContext &context) {
+        VERBOSE
         cout << "Gen IntegerLiteral:" << value << endl;
         return ConstantFP::get(Type::getDoubleTy(context.context), value);
     }
-
+    Value * StringLiteralExpr::codeGen(CodeContext &context) {
+        VERBOSE
+        cout << "Gen StringLiteralExpr:" << value << endl;
+        return context.builder.CreateGlobalString(this->value, "str");
+    }
     Value *IdentifierExpr::codeGen(CodeContext &context) {
         if (!isType) {
             if (isRef) {
                 this->isMutable = true;
+                VERBOSE
                 cout << "Gen IdentifierRef:" << name << endl;
                 if (isOutsideFunction(context))
                     return LogErrorV("Can not ref var " + name + " out side function ", this);
@@ -168,6 +185,7 @@ namespace microcc {
     }
 
     Value *BinaryOperatorExpr::codeGen(CodeContext &context) {
+        VERBOSE
         cout << "Gen BinaryOperatorExpr" << endl;
         Value *L = lhs->codeGen(context);
         Value *R = rhs->codeGen(context);
@@ -240,6 +258,7 @@ namespace microcc {
     }
 
     Value *VarDeclStmt::codeGen(CodeContext &context) {
+        VERBOSE
         cout << "Gen VarDeclStmt " << "Type:" << type->name << " Name:" << id->name << endl;
         AllocaInst *p = nullptr;
         Value *q = nullptr;
@@ -278,17 +297,19 @@ namespace microcc {
                 context.builder.CreateStore(q, p);
             (*context.getCurrentLocalSymbolTable())[id->name] = p;
         }
-
+        VERBOSE
         cout << "end" << endl;
         return p;
     }
 
     Value *SingleExprStmt::codeGen(CodeContext &context) {
+        VERBOSE
         cout << "Gen SingleExprStmt" << endl;
         return expr->codeGen(context);
     }
 
     Value *Stmts::codeGen(CodeContext &context) {
+        VERBOSE
         cout << "Gen Stmts" << endl;
         Value *p = nullptr;
         for (auto &stmt:stmts) {
@@ -314,14 +335,17 @@ namespace microcc {
         if (!isOutsideFunction(context)) {
             return LogErrorV("can not define function inside function", this);
         }
-        cout << "Gen FuncDeclStmt:" << endl;
-        cout << "Function return type:" << type->name << endl;
-        cout << "Function name:" << id->name << endl;
-        cout << "Function args:" << endl;
+        VERBOSE{
+            cout << "Gen FuncDeclStmt:" << endl;
+            cout << "Function return type:" << type->name << endl;
+            cout << "Function name:" << id->name << endl;
+            cout << "Function args:" << endl;
+        }
         context.localSymbol.clear();
         std::vector<Type *> argTypes;
         std::vector<string> argNames;
         for (auto &arg:*args) {
+            VERBOSE
             cout << "Type: " << arg->type->name << ",Name: " << arg->id->name << endl;
             argNames.push_back(arg->id->name);
             argTypes.push_back(context.getType(arg->type->name));
@@ -345,21 +369,25 @@ namespace microcc {
     }
 
     Value *ReturnStmt::codeGen(CodeContext &context) {
+        VERBOSE
         cout << "Gen ReturnStmt" << endl;
         Value *ret = expr->codeGen(context);
         if (expr->isMutable) {
             ret = context.builder.CreateLoad(ret);
         }
         context.builder.CreateRet(ret);
+        return nullptr;
     }
 
     Value *CallExpr::codeGen(CodeContext &context) {
-        cout << "Gen CallExpr" << endl;
-        cout << "Callee: "<<callee->name<<endl;
+        VERBOSE{
+            cout << "Gen CallExpr" << endl;
+            cout << "Callee: "<<callee->name<<endl;
+        }
         Function * calleePtr = context.theModule->getFunction(callee->name);
         if(!calleePtr)
             return LogErrorV("call undefined function",this);
-        else if(args->size()!=calleePtr->arg_size())
+        else if(!calleePtr->isVarArg() && args->size()!=calleePtr->arg_size())
             return LogErrorV("function args count mismatch",this);
         else{
             vector<Value *> argsToPass;

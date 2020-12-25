@@ -27,7 +27,7 @@
 %locations
 
 /* %token NUM VAR  */
-%token <string> T_INTEGER T_DOUBLE T_IDENTIFIER T_TYPE_INT T_TYPE_DOUBLE 
+%token <string> T_INTEGER T_DOUBLE T_IDENTIFIER T_TYPE_INT T_TYPE_DOUBLE T_STRING_LITERAL
 %token <token> T_ADD T_MINUS T_DIV T_MUL T_MOD T_ASSIGN T_GT T_GE T_LT T_LE T_EQUAL T_IF T_ELSE T_WHILE
 %token T_LPAREN  T_RPAREN T_LSQUBRACK T_RSQUBRACK T_LBRACE T_RBRACE
 %token T_SEMICOLON T_COMMA
@@ -85,6 +85,7 @@ expr : T_INTEGER {$$ = new IntegerLiteralExpr(atol($1->c_str()),LLOC(@1));}
       |      expr T_ASSIGN expr{ $1->isAssign = true;$$ = new BinaryOperatorExpr($2,unique_ptr<Expr>($1),unique_ptr<Expr>($3),LLOC(@2)); } 
       |      T_IDENTIFIER {$$ = new IdentifierExpr($1,false,LLOC(@1));}
       |      call_expr
+      |      T_STRING_LITERAL {$$ = new StringLiteralExpr(*$1,LLOC(@1));}
 
 val_type : T_TYPE_INT {$$ = new IdentifierExpr($1,true,LLOC(@1));} 
       |           T_TYPE_DOUBLE {$$ = new IdentifierExpr($1,true,LLOC(@1));}

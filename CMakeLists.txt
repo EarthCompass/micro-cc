@@ -4,7 +4,7 @@ project(micro-cc)
 set(CMAKE_CXX_STANDARD 14)
 
 # disable warning
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-deprecated-register")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-deprecated-register -fno-rtti")
 
 set(LLVM_DIR clang+llvm-11.0.0-x86_64-apple-darwin/lib/cmake/llvm)
 

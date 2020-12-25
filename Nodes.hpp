@@ -2,7 +2,9 @@
 
 #include <iostream>
 #include <llvm/IR/Value.h>
+#include <utility>
 #include <vector>
+#include <regex>
 
 #define PRINTTAB                                                               \
   for (size_t _iiii = 0; _iiii < level; _iiii++) {                             \
@@ -93,6 +95,24 @@ namespace microcc {
         llvm::Value *codeGen(CodeContext &context) override;
     };
 
+    class StringLiteralExpr : public Expr {
+    public:
+        std::string value;
+
+        explicit StringLiteralExpr(std::string value, int line1, int col1) : value(std::move(value)) {
+            line = line1;
+            col = col1;
+            this->value = this->value.substr(1, this->value.size()-2);
+            this->value = std::regex_replace(this->value,std::regex("\\\\n"),"\n");
+        }
+
+        void PrintAST(int level) override {
+            PRINTTAB
+            std::cout << "StringLiteralExpr :" << value << "\n";
+        }
+
+        llvm::Value *codeGen(CodeContext &context) override;
+    };
     class BinaryOperatorExpr : public Expr {
     public:
         int op;
@@ -323,7 +343,21 @@ namespace microcc {
             col = col1;
             line = line1;
         }
-
+        void PrintAST(int level) override {
+            PRINTTAB
+            std::cout << "IfStmt" << "\n";
+            PRINTTAB
+            std::cout<<"condition:"<<"\n";
+            condition->PrintAST(level+1);
+            PRINTTAB
+            std::cout<<"if:"<<"\n";
+            ifStmts->PrintAST(level+1);
+            if(elseStmts){
+                PRINTTAB
+                std::cout<<"else:"<<"\n";
+                elseStmts->PrintAST(level+1);
+            }
+        }
         llvm::Value *codeGen(CodeContext &context) override;
     };
 
@@ -340,6 +374,16 @@ namespace microcc {
         }
 
         llvm::Value *codeGen(CodeContext &context) override;
+        void PrintAST(int level) override {
+            PRINTTAB
+            std::cout << "WhileStmt" << "\n";
+            PRINTTAB
+            std::cout<<"condition:"<<"\n";
+            condition->PrintAST(level+1);
+            PRINTTAB
+            std::cout<<"body:"<<"\n";
+            body->PrintAST(level+1);
+        }
     };
 
 } // namespace microcc
