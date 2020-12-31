@@ -20,6 +20,7 @@ extern microcc::Stmts *Mprogram;
 cl::opt<bool> emitIR ("emit-ir", cl::desc("Print IR to stdout"));
 cl::opt<bool> verbose ("v", cl::desc("Show more message"));
 cl::opt<bool> printAST ("ast", cl::desc("Print AST to stdout"));
+cl::opt<bool> printSymbol ("symbol", cl::desc("Print Symbol to stdout"));
 cl::opt<string> outputFilename("o", cl::desc("Specify output filename, micro-cc will try to generate executable file using system cc if this is set"), cl::value_desc("filename"));
 cl::opt<string> outputObjFilename("obj", cl::desc("Specify output obj filename"), cl::value_desc("filename"));
 cl::opt<string> inputFilename(cl::Positional, cl::desc("<input file>"), cl::Required);

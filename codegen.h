@@ -23,6 +23,7 @@ using namespace std;
 typedef std::map<std::string, AllocaInst *> localSymbolTable;
 extern cl::opt<bool> emitIR;
 extern cl::opt<bool> verbose;
+extern cl::opt<bool> printSymbol;
 
 namespace microcc {
 
@@ -44,6 +45,8 @@ namespace microcc {
             this->pushBasicBlock(block);
             FunctionType * printfType =  FunctionType::get(Type::getInt32Ty(context),true);
             Function::Create(printfType, GlobalValue::ExternalLinkage, "printf", this->theModule.get());
+            FunctionType * scanfType =  FunctionType::get(Type::getInt32Ty(context),true);
+            Function::Create(scanfType, GlobalValue::ExternalLinkage, "scanf", this->theModule.get());
 //            Function::Create()
             Value *p = root.codeGen(*this);
             if (!theModule->getFunction("main")) {
@@ -117,6 +120,15 @@ namespace microcc {
         }
 
         inline void popLocalSymbolTable() {
+            if(printSymbol){
+//                cout<<"function: "<<this->builder.GetInsertBlock()->getParent()->getName().str()<<endl;
+                cout<<"------"<<endl;
+                auto last = this->localSymbolStack.size() - 1;
+                auto p = this->localSymbolStack[last];
+                for (auto iter = p->rbegin();iter!=p->rend();iter++){
+                    cout<<"local var :"<<iter->first<<", "<<iter->second<<endl;
+                }
+            }
             this->localSymbolStack.pop_back();
         }
 
@@ -139,7 +151,8 @@ namespace microcc {
 
     Value *LogErrorV(const string &str, Node *loc = nullptr) {
         if (loc) {
-            fprintf(stderr, "Error: %s at %d:%d\n", str.c_str(), loc->line, loc->col);
+//            fprintf(stderr, "Error: %s at %d:%d\n", str.c_str(), loc->line, loc->col);
+            fprintf(stderr, "Error: %s at line %d\n", str.c_str(), loc->line);
         } else {
             fprintf(stderr, "Error: %s\n", str.c_str());
         }
@@ -393,8 +406,9 @@ namespace microcc {
             vector<Value *> argsToPass;
             for (auto & argExpr:*args) {
                 Value *p = argExpr->codeGen(context);
-                if(argExpr->isMutable)
+                if(argExpr->isMutable && !argExpr->isAssign){
                     p = context.builder.CreateLoad(p);
+                }
                 argsToPass.push_back(p);
             }
             return context.builder.CreateCall(calleePtr,argsToPass,"call");

@@ -1,0 +1,9 @@
+int a=1;
+int main(){
+    {
+        int a= 114514;
+        printf("a in compound stmt is %d\n",a);
+    }
+    printf("global a is %d\n",a);
+    return 0;
+}

@@ -29,7 +29,7 @@
 /* %token NUM VAR  */
 %token <string> T_INTEGER T_DOUBLE T_IDENTIFIER T_TYPE_INT T_TYPE_DOUBLE T_STRING_LITERAL
 %token <token> T_ADD T_MINUS T_DIV T_MUL T_MOD T_ASSIGN T_GT T_GE T_LT T_LE T_EQUAL T_IF T_ELSE T_WHILE
-%token T_LPAREN  T_RPAREN T_LSQUBRACK T_RSQUBRACK T_LBRACE T_RBRACE
+%token T_LPAREN  T_RPAREN T_LSQUBRACK T_RSQUBRACK T_LBRACE T_RBRACE T_AND
 %token T_SEMICOLON T_COMMA
 %token T_RETURN
 
@@ -86,6 +86,8 @@ expr : T_INTEGER {$$ = new IntegerLiteralExpr(atol($1->c_str()),LLOC(@1));}
       |      T_IDENTIFIER {$$ = new IdentifierExpr($1,false,LLOC(@1));}
       |      call_expr
       |      T_STRING_LITERAL {$$ = new StringLiteralExpr(*$1,LLOC(@1));}
+      |      T_AND T_IDENTIFIER {$$ = new IdentifierExpr($2,false,LLOC(@2));$$->isAssign=true;}
+
 
 val_type : T_TYPE_INT {$$ = new IdentifierExpr($1,true,LLOC(@1));} 
       |           T_TYPE_DOUBLE {$$ = new IdentifierExpr($1,true,LLOC(@1));}
@@ -125,6 +127,7 @@ while_stmt: T_WHILE T_LPAREN expr T_RPAREN compound_stmt {$$ = new WhileStmt(uni
 %%
 
 void yyerror(const char* s) {
-      std::cout << "0ops, parse error!  Message: " << s << " at "<<"line:"<<yylloc.first_line<<" col:"<<yylloc.first_column<<std::endl ;
+      //std::cout << "0ops, parse error!  Message: " << s << " at "<<"line:"<<yylloc.first_line<<" col:"<<yylloc.first_column<<std::endl ;
+      std::cout << "0ops, parse error!  Message: " << s << " at "<<"line:"<<yylloc.first_line<<std::endl;
       exit(-1);
 }
