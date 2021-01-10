@@ -50,7 +50,7 @@ extern llvm::cl::opt<bool> verbose;
 "<="             { VERBOSE cout << "T_LE: " << yytext << endl; return TOKEN(T_LE);}
 "=="             { VERBOSE cout << "T_EQUAL: " << yytext << endl; return TOKEN(T_EQUAL);}
 "="              { VERBOSE cout << "T_ASSIGN: " << yytext << endl; return TOKEN(T_ASSIGN);}
-"="              { VERBOSE cout << "T_AND: " << yytext << endl; return TOKEN(T_AND);}
+"&"              { VERBOSE cout << "T_AND: " << yytext << endl; return TOKEN(T_AND);}
 ";"              { VERBOSE cout << "T_SEMICOLON: " << yytext << endl; return TOKEN(T_SEMICOLON);}
 ","              { VERBOSE cout << "T_COMMA: " << yytext << endl; return TOKEN(T_COMMA);}
 .                { VERBOSE cout << "UNKNOWN" << endl;}
