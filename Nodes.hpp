@@ -141,9 +141,9 @@ namespace microcc {
 
     class VarDeclStmt : public Stmt {
     public:
-        std::unique_ptr<IdentifierExpr> type;
-        std::unique_ptr<IdentifierExpr> id;
-        std::unique_ptr<Expr> expr;
+        std::unique_ptr<IdentifierExpr> type;//类型
+        std::unique_ptr<IdentifierExpr> id;//变量id
+        std::unique_ptr<Expr> expr;//初始化表达式
 
         VarDeclStmt(std::unique_ptr<IdentifierExpr> type,
                     std::unique_ptr<IdentifierExpr> id,

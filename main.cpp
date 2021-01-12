@@ -45,7 +45,7 @@ int main(int argc, const char *argv[]) {
     }
     CodeContext rootContext;
     rootContext.IRGen(*Mprogram);
-    if(!outputFilename.empty()){
+    if(!outputObjFilename.empty()){
         rootContext.ObjectGen(outputObjFilename);
         if(!outputFilename.empty()){
             string s ="cc "+outputObjFilename+" -o "+outputFilename;

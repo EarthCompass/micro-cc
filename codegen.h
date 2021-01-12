@@ -32,14 +32,14 @@ namespace microcc {
         LLVMContext context;
         unique_ptr<Module> theModule;
         IRBuilder<> builder;
-        std::map<std::string, AllocaInst *> localSymbol;
         std::stack<BasicBlock *> bbs;
         std::vector<localSymbolTable *> localSymbolStack;
+        // std::map<std::string, AllocaInst *> localSymbol;
 
         void IRGen(Stmts &root) {
             VERBOSE
             cout << "Generating IR code in context" << endl;
-            std::vector<Type *> sysArgs;
+            // std::vector<Type *> sysArgs;
             BasicBlock *block = BasicBlock::Create(this->context, "entry");
 
             this->pushBasicBlock(block);
@@ -47,7 +47,6 @@ namespace microcc {
             Function::Create(printfType, GlobalValue::ExternalLinkage, "printf", this->theModule.get());
             FunctionType * scanfType =  FunctionType::get(Type::getInt32Ty(context),true);
             Function::Create(scanfType, GlobalValue::ExternalLinkage, "scanf", this->theModule.get());
-//            Function::Create()
             Value *p = root.codeGen(*this);
             if (!theModule->getFunction("main")) {
                 cerr << "\"main\" function not found" << endl;
@@ -163,7 +162,6 @@ namespace microcc {
     Value *IntegerLiteralExpr::codeGen(CodeContext &context) {
         VERBOSE
         cout << "Gen IntegerLiteral:" << value << endl;
-        // return (llvm::Value*)0;
         return ConstantInt::get(Type::getInt32Ty(context.context), value, true);
     }
 
@@ -278,9 +276,14 @@ namespace microcc {
         if (expr) {
             q = expr->codeGen(context);
         }
+        if(expr && expr->isMutable)
+            q =  context.builder.CreateLoad(q);
         if (isRoot) {
             GlobalVariable *G = nullptr;
             if (type->name == "int") {
+                if(context.theModule->getGlobalVariable(id->name)){
+                    return LogErrorV("redefine global var " + id->name, this);
+                }
                 context.theModule->getOrInsertGlobal(id->name, Type::getInt32Ty(context.context));
                 G = context.theModule->getGlobalVariable(id->name);
                 if (!expr)
@@ -348,13 +351,16 @@ namespace microcc {
         if (!isOutsideFunction(context)) {
             return LogErrorV("can not define function inside function", this);
         }
+        Function * getfunc = context.theModule->getFunction(id->name);
+        if(getfunc)
+            return LogErrorV("redefine function:"+id->name,this);
         VERBOSE{
             cout << "Gen FuncDeclStmt:" << endl;
             cout << "Function return type:" << type->name << endl;
             cout << "Function name:" << id->name << endl;
             cout << "Function args:" << endl;
         }
-        context.localSymbol.clear();
+        // context.localSymbol.clear();
         std::vector<Type *> argTypes;
         std::vector<string> argNames;
         for (auto &arg:*args) {
